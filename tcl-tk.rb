@@ -18,8 +18,14 @@ class TclTk < Formula
   option 'with-x11', 'Build X11-based Tk instead of Aqua-basd Tk'
 
   depends_on :x11 => :optional
-
+  
   def install
+    flags = "-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk -mmacosx-version-min=10.6"
+
+      ENV['CXXFLAGS'] = flags
+      ENV['CFLAGS'] = flags
+      ENV['LDFLAGS'] = flags
+
     args = ["--prefix=#{prefix}", "--mandir=#{man}"]
     args << "--enable-threads" if build.include? "enable-threads"
     args << "--enable-64bit" if MacOS.prefer_64_bit?

@@ -42,7 +42,7 @@ class Python < Formula
   end
 
   def site_packages_cellar
-    prefix/"Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages"
+    prefix/"lib/python2.7/site-packages"
   end
 
   # The HOMEBREW_PREFIX location of site-packages.
@@ -62,7 +62,7 @@ class Python < Formula
              --enable-ipv6
              --datarootdir=#{share}
              --datadir=#{share}
-             --enable-framework=#{prefix}/Frameworks
+             --enable-shared
            ]
 
     args << '--without-gcc' if ENV.compiler == :clang
@@ -87,7 +87,6 @@ class Python < Formula
     # `brew install enchant && pip install pyenchant`
     inreplace "./Lib/ctypes/macholib/dyld.py" do |f|
       f.gsub! 'DEFAULT_LIBRARY_FALLBACK = [', "DEFAULT_LIBRARY_FALLBACK = [ '#{HOMEBREW_PREFIX}/lib',"
-      f.gsub! 'DEFAULT_FRAMEWORK_FALLBACK = [', "DEFAULT_FRAMEWORK_FALLBACK = [ '#{HOMEBREW_PREFIX}/Frameworks',"
     end
 
     # Fix http://bugs.python.org/issue18071
@@ -98,6 +97,13 @@ class Python < Formula
       ENV.append 'CPPFLAGS', "-I#{Formula.factory('tcl-tk').opt_prefix}/include"
       ENV.append 'LDFLAGS', "-L#{Formula.factory('tcl-tk').opt_prefix}/lib"
     end
+
+    flags = "-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk -mmacosx-version-min=10.6"
+
+    ENV['MACOSX_DEPLOYMENT_TARGET'] = '10.6'
+    ENV.append 'CFLAGS', *flags
+    ENV.append 'CXXFLAGS', *flags
+    ENV.append 'LDFLAGS', *flags 
 
     system "./configure", *args
 
@@ -112,7 +118,6 @@ class Python < Formula
     system "make", "install", "PYTHONAPPSDIR=#{prefix}"
     # Demos and Tools
     (HOMEBREW_PREFIX/'share/python').mkpath
-    system "make", "frameworkinstallextras", "PYTHONAPPSDIR=#{share}/python"
     system "make", "quicktest" if build.include? 'quicktest'
 
     # Post-install, fix up the site-packages so that user-installed Python
@@ -144,7 +149,7 @@ class Python < Formula
     Pip.new.brew { system "#{bin}/python2", *setup_args }
 
     # And now we write the distuitsl.cfg
-    cfg = prefix/"Frameworks/Python.framework/Versions/2.7/lib/python2.7/distutils/distutils.cfg"
+    cfg = prefix/"lib/python2.7/distutils/distutils.cfg"
     cfg.delete if cfg.exist?
     cfg.write <<-EOF.undent
       [global]
@@ -155,7 +160,7 @@ class Python < Formula
     EOF
 
     # Work-around for that bug: http://bugs.python.org/issue18050
-    inreplace "#{prefix}/Frameworks/Python.framework/Versions/2.7/lib/python2.7/re.py", 'import sys', <<-EOS.undent
+    inreplace "#{prefix}/lib/python2.7/re.py", 'import sys', <<-EOS.undent
       import sys
       try:
           from _sre import MAXREPEAT
@@ -163,14 +168,6 @@ class Python < Formula
           import _sre
           _sre.MAXREPEAT = 65535 # this monkey-patches all other places of "from _sre import MAXREPEAT"'
       EOS
-
-      # Fixes setting Python build flags for certain software
-      # See: https://github.com/mxcl/homebrew/pull/20182
-      # http://bugs.python.org/issue3588
-      inreplace "#{prefix}/Frameworks/Python.framework/Versions/2.7/lib/python2.7/config/Makefile" do |s|
-        s.change_make_var! "LINKFORSHARED",
-          "-u _PyMac_Error $(PYTHONFRAMEWORKINSTALLDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)"
-      end
   end
 
   def distutils_fix_superenv(args)
@@ -197,7 +194,7 @@ class Python < Formula
     args << cflags
     args << ldflags
     # Avoid linking to libgcc http://code.activestate.com/lists/python-dev/112195/
-    args << "MACOSX_DEPLOYMENT_TARGET=#{MacOS.version}"
+    args << "MACOSX_DEPLOYMENT_TARGET=10.6"
     # We want our readline! This is just to outsmart the detection code,
     # superenv handles that cc finds includes/libs!
     inreplace "setup.py",
